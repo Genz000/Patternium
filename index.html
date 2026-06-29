@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Patternium — Seamless Pattern Studio</title>
+<style>
+  :root{
+    --bg:#eceae6;
+    --panel:#f4f3f0;
+    --ink:#111110;
+    --ink-soft:#6b6a66;
+    --line:#d8d6d1;
+    --line-strong:#c4c2bc;
+    --accent:#ff4a1c;
+    --white:#fbfbfa;
+    --mono:"DM Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans:"Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:var(--sans);font-size:13px;
+    -webkit-font-smoothing:antialiased;overflow:hidden;
+  }
+  .mono{font-family:var(--mono);letter-spacing:.04em}
+
+  /* ---------- top bar ---------- */
+  header{
+    height:54px;display:flex;align-items:center;gap:18px;
+    padding:0 20px;border-bottom:1px solid var(--line);
+    background:var(--panel);position:relative;z-index:10;
+  }
+  .logo{display:flex;align-items:center;gap:10px;font-weight:600}
+  .mark{width:22px;height:22px;display:block}
+  .brand{font-family:var(--mono);font-size:14px;letter-spacing:.18em;font-weight:500}
+  .tag{font-family:var(--mono);font-size:10px;color:var(--ink-soft);letter-spacing:.16em;
+       text-transform:uppercase;border-left:1px solid var(--line-strong);padding-left:16px}
+  header .spacer{flex:1}
+  .ghost-btn{
+    font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    background:transparent;border:1px solid var(--line-strong);color:var(--ink);
+    padding:8px 14px;border-radius:999px;cursor:pointer;transition:.15s;
+  }
+  .ghost-btn:hover{background:var(--ink);color:var(--white);border-color:var(--ink)}
+  .solid-btn{
+    font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    background:var(--ink);border:1px solid var(--ink);color:var(--white);
+    padding:8px 16px;border-radius:999px;cursor:pointer;transition:.15s;
+    display:inline-flex;align-items:center;gap:8px;
+  }
+  .solid-btn:hover{background:var(--accent);border-color:var(--accent)}
+
+  /* ---------- layout ---------- */
+  .app{display:flex;height:calc(100% - 54px)}
+  .rail{width:248px;background:var(--panel);border-right:1px solid var(--line);
+        display:flex;flex-direction:column;overflow-y:auto}
+  .rail.right{border-right:none;border-left:1px solid var(--line);width:288px}
+  .stage{flex:1;position:relative;overflow:hidden;background:
+        radial-gradient(circle at 1px 1px, var(--line-strong) 1px, transparent 0);
+        background-size:22px 22px;background-color:var(--bg)}
+
+  .sect{border-bottom:1px solid var(--line);padding:16px 16px 18px}
+  .sect h3{margin:0 0 12px;font-family:var(--mono);font-size:10px;letter-spacing:.16em;
+           text-transform:uppercase;color:var(--ink-soft);font-weight:500;
+           display:flex;align-items:center;gap:8px}
+  .sect h3 .dot{width:5px;height:5px;background:var(--accent);border-radius:50%}
+
+  /* upload */
+  .drop{
+    border:1px dashed var(--line-strong);border-radius:10px;padding:22px 14px;text-align:center;
+    cursor:pointer;transition:.15s;background:var(--white)}
+  .drop:hover,.drop.drag{border-color:var(--accent);background:#fff}
+  .drop .ico{font-size:20px;display:block;margin-bottom:8px;opacity:.5}
+  .drop p{margin:0;font-size:11px;color:var(--ink-soft);line-height:1.5}
+  .drop b{color:var(--ink);font-weight:600}
+
+  .preset-row{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:12px}
+  .preset{aspect-ratio:1;border:1px solid var(--line-strong);border-radius:8px;background:var(--white);
+          cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s;padding:6px}
+  .preset:hover{border-color:var(--ink);transform:translateY(-1px)}
+  .preset svg{width:100%;height:100%}
+
+  /* layers */
+  .layers{display:flex;flex-direction:column;gap:6px}
+  .layer{
+    display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:8px;
+    border:1px solid transparent;cursor:pointer;transition:.12s;background:var(--white)}
+  .layer:hover{border-color:var(--line-strong)}
+  .layer.sel{border-color:var(--ink);background:#fff}
+  .layer .thumb{width:30px;height:30px;border-radius:6px;background:#fff;border:1px solid var(--line);
+                background-size:contain;background-repeat:no-repeat;background-position:center;flex:none}
+  .layer .name{flex:1;font-family:var(--mono);font-size:11px;color:var(--ink);overflow:hidden;
+               text-overflow:ellipsis;white-space:nowrap}
+  .layer .del{opacity:0;border:none;background:none;cursor:pointer;color:var(--ink-soft);font-size:14px;padding:2px 4px}
+  .layer:hover .del{opacity:1}
+  .layer .del:hover{color:var(--accent)}
+  .empty{font-family:var(--mono);font-size:11px;color:var(--ink-soft);text-align:center;padding:14px 0;opacity:.7}
+
+  /* controls */
+  .ctrl{margin-bottom:14px}
+  .ctrl:last-child{margin-bottom:0}
+  .ctrl label{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;
+              letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:7px}
+  .ctrl label .val{color:var(--ink)}
+  input[type=range]{
+    -webkit-appearance:none;width:100%;height:2px;background:var(--line-strong);border-radius:2px;outline:none}
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--ink);
+    cursor:pointer;border:2px solid var(--panel)}
+  input[type=range]:disabled{opacity:.4}
+
+  .num-row{display:flex;gap:8px}
+  .num-row .seg{flex:1;display:flex;align-items:center;background:var(--white);border:1px solid var(--line-strong);
+                border-radius:7px;overflow:hidden}
+  .num-row .seg span{font-family:var(--mono);font-size:10px;color:var(--ink-soft);padding:0 0 0 9px}
+  .num-row input{flex:1;border:none;background:none;font-family:var(--mono);font-size:11px;color:var(--ink);
+                 padding:8px 8px;width:100%;outline:none}
+
+  .seg-btns{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+        border:1px solid var(--line-strong);background:var(--white);border-radius:7px;padding:7px 9px;
+        cursor:pointer;transition:.12s;flex:1;text-align:center;white-space:nowrap}
+  .chip:hover{border-color:var(--ink)}
+  .chip:disabled{opacity:.35;cursor:not-allowed}
+
+  .swatches{display:flex;gap:7px;flex-wrap:wrap}
+  .sw{width:26px;height:26px;border-radius:7px;cursor:pointer;border:1px solid var(--line-strong);transition:.12s}
+  .sw:hover{transform:scale(1.08)}
+  .sw.sel{box-shadow:0 0 0 2px var(--ink)}
+
+  /* preview */
+  .preview-wrap{padding:16px}
+  .preview-box{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--white);
+               aspect-ratio:1;position:relative}
+  #previewCanvas{width:100%;height:100%;display:block;image-rendering:auto}
+  .preview-meta{display:flex;justify-content:space-between;margin-top:10px;font-family:var(--mono);
+                font-size:10px;color:var(--ink-soft);letter-spacing:.05em}
+
+  /* stage canvas */
+  #editor{position:absolute;inset:0;cursor:default;display:block}
+  .hint{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);
+        font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--ink-soft);
+        background:rgba(244,243,240,.86);backdrop-filter:blur(3px);border:1px solid var(--line);
+        padding:7px 14px;border-radius:999px;pointer-events:none;text-transform:uppercase;white-space:nowrap}
+  .zoombar{position:absolute;left:16px;bottom:16px;display:flex;gap:6px;align-items:center;
+           background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:5px 6px}
+  .zoombar button{width:24px;height:24px;border:none;background:none;cursor:pointer;font-family:var(--mono);
+                  font-size:14px;color:var(--ink);border-radius:50%}
+  .zoombar button:hover{background:var(--bg)}
+  .zoombar .z{font-family:var(--mono);font-size:11px;color:var(--ink-soft);min-width:42px;text-align:center}
+
+  .foot{margin-top:auto;padding:16px;border-top:1px solid var(--line)}
+  input[type=file]{display:none}
+  .kbd{font-family:var(--mono);background:var(--bg);border:1px solid var(--line-strong);border-radius:4px;
+       padding:1px 5px;font-size:10px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <svg class="mark" viewBox="0 0 100 100" fill="var(--ink)">
+      <path d="M38 8h24v30h30v24H62v30H38V62H8V38h30z"/>
+    </svg>
+    <span class="brand">PATTERNIUM</span>
+  </div>
+  <span class="tag">Seamless&nbsp;Pattern&nbsp;Studio</span>
+  <div class="spacer"></div>
+  <button class="ghost-btn" id="btnClear">Clear</button>
+  <button class="solid-btn" id="btnExport">
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+      <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
+    Export Tile
+  </button>
+</header>
+
+<div class="app">
+  <!-- LEFT RAIL -->
+  <aside class="rail">
+    <div class="sect">
+      <h3><span class="dot"></span>Elements</h3>
+      <label class="drop" id="drop">
+        <input type="file" id="file" accept="image/*" multiple>
+        <span class="ico">⊕</span>
+        <p><b>Upload</b> or drop images<br>PNG · SVG · JPG</p>
+      </label>
+      <div class="preset-row" id="presets"></div>
+    </div>
+
+    <div class="sect">
+      <h3><span class="dot"></span>Layers</h3>
+      <div class="layers" id="layers">
+        <div class="empty">No elements yet</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- STAGE -->
+  <main class="stage">
+    <canvas id="editor"></canvas>
+    <div class="hint" id="hint">Upload an element to begin · elements wrap across edges for seamless tiling</div>
+    <div class="zoombar">
+      <button id="zoomOut">−</button>
+      <span class="z mono" id="zoomVal">100%</span>
+      <button id="zoomIn">+</button>
+      <button id="zoomFit" title="Fit">⊡</button>
+    </div>
+  </main>
+
+  <!-- RIGHT RAIL -->
+  <aside class="rail right">
+    <div class="sect">
+      <h3><span class="dot"></span>Tile Canvas</h3>
+      <div class="ctrl">
+        <label>Tile size <span class="val"><span id="tileVal">512</span> px</span></label>
+        <input type="range" id="tileSize" min="128" max="1024" step="32" value="512">
+      </div>
+      <div class="ctrl">
+        <label>Background</label>
+        <div class="swatches" id="bgSwatches"></div>
+      </div>
+    </div>
+
+    <div class="sect" id="transformSect">
+      <h3><span class="dot"></span>Transform</h3>
+      <div class="ctrl">
+        <label>Scale <span class="val"><span id="scaleVal">100</span>%</span></label>
+        <input type="range" id="scale" min="5" max="300" step="1" value="100" disabled>
+      </div>
+      <div class="ctrl">
+        <label>Rotation <span class="val"><span id="rotVal">0</span>°</span></label>
+        <input type="range" id="rotate" min="0" max="360" step="1" value="0" disabled>
+      </div>
+      <div class="ctrl">
+        <label>Opacity <span class="val"><span id="opaVal">100</span>%</span></label>
+        <input type="range" id="opacity" min="5" max="100" step="1" value="100" disabled>
+      </div>
+      <div class="ctrl">
+        <label>Order</label>
+        <div class="seg-btns">
+          <button class="chip" id="bringFwd" disabled>Forward</button>
+          <button class="chip" id="sendBack" disabled>Back</button>
+          <button class="chip" id="dupBtn" disabled>Duplicate</button>
+        </div>
+      </div>
+      <div class="ctrl">
+        <label>Auto-arrange</label>
+        <div class="seg-btns">
+          <button class="chip" id="gridFill">Grid fill</button>
+          <button class="chip" id="scatter">Scatter</button>
+          <button class="chip" id="centerEl" disabled>Center</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="preview-wrap">
+      <h3 style="margin:0 0 12px;font-family:var(--mono);font-size:10px;letter-spacing:.16em;
+                 text-transform:uppercase;color:var(--ink-soft);display:flex;align-items:center;gap:8px">
+        <span style="width:5px;height:5px;background:var(--accent);border-radius:50%"></span>Seamless preview</h3>
+      <div class="preview-box">
+        <canvas id="previewCanvas"></canvas>
+      </div>
+      <div class="preview-meta">
+        <span>3×3 repeat</span>
+        <span id="elCount">0 elements</span>
+      </div>
+    </div>
+
+    <div class="foot">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--ink-soft);line-height:1.9">
+        <span class="kbd">drag</span> move &nbsp; <span class="kbd">corner</span> resize<br>
+        <span class="kbd">top dot</span> rotate &nbsp; <span class="kbd">⌫</span> delete
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+/* ============================================================
+   Patternium — seamless pattern tile editor
+   Core idea: the tile is a torus. Every element is drawn into
+   the tile AND wrapped across all 8 neighbor offsets so anything
+   crossing an edge reappears on the opposite side → no seams.
+   ============================================================ */
+
+const editor   = document.getElementById('editor');
+const ectx     = editor.getContext('2d');
+const preview  = document.getElementById('previewCanvas');
+const pctx     = preview.getContext('2d');
+
+const state = {
+  tile: 512,
+  bg: '#ffffff',
+  elements: [],          // {id,img,x,y,w,h,scale,rot,opacity,name}
+  selected: null,
+  zoom: 1,
+  pan: {x:0, y:0},
+  view: {w:0, h:0},
+};
+let nextId = 1;
+
+/* ---------- view sizing ---------- */
+function resizeView(){
+  const stage = editor.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  state.view.w = stage.width; state.view.h = stage.height;
+  editor.width = stage.width*dpr; editor.height = stage.height*dpr;
+  editor.style.width = stage.width+'px'; editor.style.height = stage.height+'px';
+  ectx.setTransform(dpr,0,0,dpr,0,0);
+  const pb = preview.parentElement.getBoundingClientRect();
+  preview.width = pb.width*dpr; preview.height = pb.height*dpr;
+  pctx.setTransform(dpr,0,0,dpr,0,0);
+  draw();
+}
+window.addEventListener('resize', resizeView);
+
+/* tile -> screen mapping (tile is centered, scaled by zoom) */
+function tileOrigin(){
+  const s = state.tile * state.zoom;
+  return {
+    ox: state.view.w/2 - s/2 + state.pan.x,
+    oy: state.view.h/2 - s/2 + state.pan.y,
+    s
+  };
+}
+function toScreen(tx,ty){ const o=tileOrigin(); return {x:o.ox+tx*state.zoom, y:o.oy+ty*state.zoom}; }
+function toTile(sx,sy){ const o=tileOrigin(); return {x:(sx-o.ox)/state.zoom, y:(sy-o.oy)/state.zoom}; }
+
+/* ---------- drawing ---------- */
+function draw(){
+  ectx.clearRect(0,0,state.view.w,state.view.h);
+  const o = tileOrigin();
+
+  // neighbor tiles (faded) to visualise tiling
+  ectx.save();
+  for(let gy=-1; gy<=1; gy++) for(let gx=-1; gx<=1; gx++){
+    if(gx===0 && gy===0) continue;
+    ectx.globalAlpha = 0.16;
+    drawTileContent(ectx, o.ox+gx*o.s, o.oy+gy*o.s, state.zoom, false);
+  }
+  ectx.restore();
+
+  // main tile bg
+  ectx.fillStyle = state.bg;
+  ectx.fillRect(o.ox,o.oy,o.s,o.s);
+
+  // main tile content (with wrap)
+  drawTileContent(ectx, o.ox, o.oy, state.zoom, false);
+
+  // tile frame
+  ectx.strokeStyle = '#111110';
+  ectx.lineWidth = 1.5;
+  ectx.strokeRect(o.ox+0.5,o.oy+0.5,o.s,o.s);
+
+  // selection chrome
+  if(state.selected){ drawSelection(state.selected, o); }
+
+  drawPreview();
+}
+
+/* draws all elements (wrapped) into a tile placed at screen (ox,oy) with scale z */
+function drawTileContent(ctx, ox, oy, z, clip){
+  const T = state.tile;
+  for(const el of state.elements){
+    // wrap offsets: draw element shifted by each neighbor so edge-crossers reappear
+    for(let dy=-1; dy<=1; dy++) for(let dx=-1; dx<=1; dx++){
+      const cx = el.x + dx*T, cy = el.y + dy*T;
+      // cull: only draw if its bbox could intersect the tile
+      const r = Math.hypot(el.w,el.h)/2 + 4;
+      if(cx + r < 0 || cx - r > T || cy + r < 0 || cy - r > T) continue;
+      ctx.save();
+      ctx.globalAlpha = el.opacity;
+      ctx.translate(ox + cx*z, oy + cy*z);
+      ctx.rotate(el.rot);
+      ctx.scale(z,z);
+      ctx.drawImage(el.img, -el.w/2, -el.h/2, el.w, el.h);
+      ctx.restore();
+    }
+  }
+}
+
+function handlePoints(el){
+  // corners in tile space, rotated around element center
+  const hw=el.w/2, hh=el.h/2;
+  const cos=Math.cos(el.rot), sin=Math.sin(el.rot);
+  const rot=(px,py)=>({x:el.x+px*cos-py*sin, y:el.y+px*sin+py*cos});
+  return {
+    nw:rot(-hw,-hh), ne:rot(hw,-hh), se:rot(hw,hh), sw:rot(-hw,hh),
+    rotor:rot(0,-hh-26/state.zoom),
+    topMid:rot(0,-hh)
+  };
+}
+
+function drawSelection(el,o){
+  const z=state.zoom;
+  const P=handlePoints(el);
+  const sp=p=>({x:o.ox+p.x*z, y:o.oy+p.y*z});
+  const nw=sp(P.nw),ne=sp(P.ne),se=sp(P.se),sw=sp(P.sw),rt=sp(P.rotor),tm=sp(P.topMid);
+  ectx.save();
+  ectx.strokeStyle='#ff4a1c'; ectx.lineWidth=1.5;
+  ectx.beginPath();
+  ectx.moveTo(nw.x,nw.y);ectx.lineTo(ne.x,ne.y);ectx.lineTo(se.x,se.y);
+  ectx.lineTo(sw.x,sw.y);ectx.closePath();ectx.stroke();
+  // rotor line + handle
+  ectx.beginPath();ectx.moveTo(tm.x,tm.y);ectx.lineTo(rt.x,rt.y);ectx.stroke();
+  ectx.fillStyle='#fff';
+  for(const c of [nw,ne,se,sw]){
+    ectx.beginPath();ectx.rect(c.x-4,c.y-4,8,8);ectx.fill();ectx.stroke();
+  }
+  ectx.beginPath();ectx.arc(rt.x,rt.y,5,0,7);ectx.fill();ectx.stroke();
+  ectx.restore();
+}
+
+/* ---------- preview (pure tiled render) ---------- */
+function drawPreview(){
+  const pb = preview.parentElement.getBoundingClientRect();
+  pctx.clearRect(0,0,pb.width,pb.height);
+  const reps=3;
+  const cell = pb.width/reps;
+  const z = cell/state.tile;
+  for(let gy=0;gy<reps;gy++) for(let gx=0;gx<reps;gx++){
+    const ox=gx*cell, oy=gy*cell;
+    pctx.fillStyle=state.bg; pctx.fillRect(ox,oy,cell,cell);
+    pctx.save();
+    pctx.beginPath();pctx.rect(ox,oy,cell,cell);pctx.clip();
+    drawTileContent(pctx, ox, oy, z, true);
+    pctx.restore();
+  }
+}
+
+/* ---------- hit testing ---------- */
+function hitHandle(sx,sy){
+  if(!state.selected) return null;
+  const el=state.selected,o=tileOrigin(),z=state.zoom;
+  const P=handlePoints(el);
+  const sp=p=>({x:o.ox+p.x*z,y:o.oy+p.y*z});
+  const tests={nw:sp(P.nw),ne:sp(P.ne),se:sp(P.se),sw:sp(P.sw),rot:sp(P.rotor)};
+  for(const k in tests){
+    if(Math.hypot(sx-tests[k].x,sy-tests[k].y) < 9) return k;
+  }
+  return null;
+}
+function hitElement(sx,sy){
+  const t=toTile(sx,sy);
+  const T=state.tile;
+  // check element + wrapped copies
+  for(let i=state.elements.length-1;i>=0;i--){
+    const el=state.elements[i];
+    for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
+      const cx=el.x+dx*T, cy=el.y+dy*T;
+      const lx=t.x-cx, ly=t.y-cy;
+      const cos=Math.cos(-el.rot),sin=Math.sin(-el.rot);
+      const px=lx*cos-ly*sin, py=lx*sin+ly*cos;
+      if(Math.abs(px)<=el.w/2 && Math.abs(py)<=el.h/2) return el;
+    }
+  }
+  return null;
+}
+
+/* ---------- interaction ---------- */
+let drag=null;
+editor.addEventListener('pointerdown',e=>{
+  const r=editor.getBoundingClientRect();
+  const sx=e.clientX-r.left, sy=e.clientY-r.top;
+  const handle=hitHandle(sx,sy);
+  if(handle){
+    const el=state.selected;
+    drag={mode:handle==='rot'?'rotate':'scale', el,
+          startDist:Math.hypot(...Object.values(toTileVec(sx,sy,el))),
+          startScale:el.scale, startW:el.w, startH:el.h,
+          baseW:el.img.naturalWidth, baseH:el.img.naturalHeight,
+          startAngle:angleTo(sx,sy,el), startRot:el.rot};
+    editor.setPointerCapture(e.pointerId); return;
+  }
+  const el=hitElement(sx,sy);
+  if(el){
+    selectElement(el);
+    const t=toTile(sx,sy);
+    drag={mode:'move',el,offx:t.x-el.x,offy:t.y-el.y};
+  }else{
+    selectElement(null);
+    drag={mode:'pan',startPan:{...state.pan},sx,sy};
+  }
+  editor.setPointerCapture(e.pointerId);
+  draw();
+});
+
+function toTileVec(sx,sy,el){ const t=toTile(sx,sy); return {x:t.x-el.x, y:t.y-el.y}; }
+function angleTo(sx,sy,el){ const v=toTileVec(sx,sy,el); return Math.atan2(v.y,v.x); }
+
+editor.addEventListener('pointermove',e=>{
+  const r=editor.getBoundingClientRect();
+  const sx=e.clientX-r.left, sy=e.clientY-r.top;
+  if(!drag){ updateCursor(sx,sy); return; }
+  if(drag.mode==='move'){
+    const t=toTile(sx,sy);
+    let nx=t.x-drag.offx, ny=t.y-drag.offy;
+    // keep center wrapped within [0,tile)
+    nx=((nx%state.tile)+state.tile)%state.tile;
+    ny=((ny%state.tile)+state.tile)%state.tile;
+    drag.el.x=nx; drag.el.y=ny; draw();
+  }else if(drag.mode==='scale'){
+    const v=toTileVec(sx,sy,drag.el);
+    const dist=Math.hypot(v.x,v.y);
+    const f=Math.max(0.04, dist/Math.max(1,drag.startDist));
+    const ns=drag.startScale*f;
+    applyScale(drag.el, ns);
+    draw(); syncPanel();
+  }else if(drag.mode==='rotate'){
+    const a=angleTo(sx,sy,drag.el);
+    drag.el.rot=drag.startRot+(a-drag.startAngle);
+    draw(); syncPanel();
+  }else if(drag.mode==='pan'){
+    state.pan.x=drag.startPan.x+(sx-drag.sx);
+    state.pan.y=drag.startPan.y+(sy-drag.sy);
+    draw();
+  }
+});
+editor.addEventListener('pointerup',e=>{ drag=null; try{editor.releasePointerCapture(e.pointerId)}catch(_){}});
+editor.addEventListener('pointerleave',()=>{ if(drag&&drag.mode==='pan')drag=null; });
+
+function updateCursor(sx,sy){
+  if(hitHandle(sx,sy)==='rot'){editor.style.cursor='grab';return;}
+  if(hitHandle(sx,sy)){editor.style.cursor='nwse-resize';return;}
+  editor.style.cursor=hitElement(sx,sy)?'move':'default';
+}
+
+function applyScale(el,scale){
+  el.scale=scale;
+  el.w=el.img.naturalWidth*scale;
+  el.h=el.img.naturalHeight*scale;
+}
+
+/* zoom with wheel */
+editor.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const r=editor.getBoundingClientRect();
+  const f=e.deltaY<0?1.08:0.926;
+  setZoom(state.zoom*f);
+},{passive:false});
+
+/* ---------- selection + panel sync ---------- */
+function selectElement(el){
+  state.selected=el;
+  document.querySelectorAll('.layer').forEach(l=>l.classList.toggle('sel', el&&l.dataset.id==el.id));
+  const has=!!el;
+  ['scale','rotate','opacity'].forEach(id=>document.getElementById(id).disabled=!has);
+  ['bringFwd','sendBack','dupBtn','centerEl'].forEach(id=>document.getElementById(id).disabled=!has);
+  syncPanel();
+}
+function syncPanel(){
+  const el=state.selected;
+  if(el){
+    document.getElementById('scale').value=Math.round(el.scale*100);
+    document.getElementById('scaleVal').textContent=Math.round(el.scale*100);
+    let deg=Math.round(el.rot*180/Math.PI)%360; if(deg<0)deg+=360;
+    document.getElementById('rotate').value=deg;
+    document.getElementById('rotVal').textContent=deg;
+    document.getElementById('opacity').value=Math.round(el.opacity*100);
+    document.getElementById('opaVal').textContent=Math.round(el.opacity*100);
+  }
+}
+
+document.getElementById('scale').addEventListener('input',e=>{
+  if(!state.selected)return;
+  applyScale(state.selected, +e.target.value/100);
+  document.getElementById('scaleVal').textContent=e.target.value; draw();
+});
+document.getElementById('rotate').addEventListener('input',e=>{
+  if(!state.selected)return;
+  state.selected.rot=+e.target.value*Math.PI/180;
+  document.getElementById('rotVal').textContent=e.target.value; draw();
+});
+document.getElementById('opacity').addEventListener('input',e=>{
+  if(!state.selected)return;
+  state.selected.opacity=+e.target.value/100;
+  document.getElementById('opaVal').textContent=e.target.value; draw();
+});
+
+document.getElementById('bringFwd').onclick=()=>reorder(1);
+document.getElementById('sendBack').onclick=()=>reorder(-1);
+function reorder(dir){
+  const el=state.selected; if(!el)return;
+  const i=state.elements.indexOf(el); const j=i+dir;
+  if(j<0||j>=state.elements.length)return;
+  state.elements.splice(i,1); state.elements.splice(j,0,el);
+  renderLayers(); draw();
+}
+document.getElementById('dupBtn').onclick=()=>{
+  const el=state.selected; if(!el)return;
+  const c={...el,id:nextId++,x:(el.x+30)%state.tile,y:(el.y+30)%state.tile,name:el.name};
+  state.elements.push(c); renderLayers(); selectElement(c); draw();
+};
+document.getElementById('centerEl').onclick=()=>{
+  if(!state.selected)return;
+  state.selected.x=state.tile/2; state.selected.y=state.tile/2; draw();
+};
+
+/* ---------- keyboard ---------- */
+window.addEventListener('keydown',e=>{
+  if(['INPUT','TEXTAREA'].includes(document.activeElement.tagName))return;
+  if((e.key==='Delete'||e.key==='Backspace')&&state.selected){
+    removeElement(state.selected); e.preventDefault();
+  }
+  if(state.selected){
+    const step=e.shiftKey?10:1; let moved=true;
+    if(e.key==='ArrowLeft')state.selected.x-=step;
+    else if(e.key==='ArrowRight')state.selected.x+=step;
+    else if(e.key==='ArrowUp')state.selected.y-=step;
+    else if(e.key==='ArrowDown')state.selected.y+=step;
+    else moved=false;
+    if(moved){
+      state.selected.x=((state.selected.x%state.tile)+state.tile)%state.tile;
+      state.selected.y=((state.selected.y%state.tile)+state.tile)%state.tile;
+      e.preventDefault(); draw();
+    }
+  }
+});
+
+/* ---------- elements / layers ---------- */
+function addImage(img,name){
+  const maxDim=state.tile*0.35;
+  let scale=1;
+  if(img.naturalWidth>maxDim||img.naturalHeight>maxDim){
+    scale=maxDim/Math.max(img.naturalWidth,img.naturalHeight);
+  }
+  const el={
+    id:nextId++, img, name:name||('element '+nextId),
+    x:state.tile/2+(Math.random()*60-30), y:state.tile/2+(Math.random()*60-30),
+    scale, w:img.naturalWidth*scale, h:img.naturalHeight*scale,
+    rot:0, opacity:1
+  };
+  state.elements.push(el);
+  renderLayers(); selectElement(el); draw();
+  document.getElementById('hint').style.display='none';
+}
+function removeElement(el){
+  state.elements=state.elements.filter(x=>x!==el);
+  if(state.selected===el)selectElement(null);
+  renderLayers(); draw();
+}
+function renderLayers(){
+  const box=document.getElementById('layers');
+  document.getElementById('elCount').textContent=state.elements.length+' element'+(state.elements.length!==1?'s':'');
+  if(!state.elements.length){box.innerHTML='<div class="empty">No elements yet</div>';return;}
+  box.innerHTML='';
+  [...state.elements].reverse().forEach(el=>{
+    const d=document.createElement('div');
+    d.className='layer'+(state.selected===el?' sel':'');
+    d.dataset.id=el.id;
+    const thumb=document.createElement('div');
+    thumb.className='thumb';
+    thumb.style.backgroundImage=`url(${el.img.src})`;
+    const nm=document.createElement('div');nm.className='name';nm.textContent=el.name;
+    const del=document.createElement('button');del.className='del';del.innerHTML='✕';
+    del.onclick=ev=>{ev.stopPropagation();removeElement(el);};
+    d.append(thumb,nm,del);
+    d.onclick=()=>{selectElement(el);renderLayers();draw();};
+    box.appendChild(d);
+  });
+}
+
+/* ---------- file upload ---------- */
+function loadFiles(files){
+  for(const f of files){
+    if(!f.type.startsWith('image/'))continue;
+    const url=URL.createObjectURL(f);
+    const img=new Image();
+    img.onload=()=>addImage(img, f.name.replace(/\.[^.]+$/,''));
+    img.src=url;
+  }
+}
+const fileInput=document.getElementById('file');
+fileInput.addEventListener('change',e=>loadFiles(e.target.files));
+const drop=document.getElementById('drop');
+['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('drag');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('drag');}));
+drop.addEventListener('drop',e=>loadFiles(e.dataTransfer.files));
+// allow drop anywhere on stage
+editor.parentElement.addEventListener('dragover',e=>e.preventDefault());
+editor.parentElement.addEventListener('drop',e=>{e.preventDefault();loadFiles(e.dataTransfer.files);});
+
+/* ---------- preset shapes (built-in vector elements) ---------- */
+const presetSVGs={
+  circle:'<circle cx="32" cy="32" r="22"/>',
+  square:'<rect x="12" y="12" width="40" height="40" rx="3"/>',
+  triangle:'<path d="M32 10 56 54 8 54Z"/>',
+  diamond:'<path d="M32 8 56 32 32 56 8 32Z"/>',
+  cross:'<path d="M26 8h12v18h18v12H38v18H26V38H8V26h18z"/>',
+  ring:'<path d="M32 10a22 22 0 100 44 22 22 0 100-44zm0 12a10 10 0 110 20 10 10 0 110-20z"/>',
+  star:'<path d="M32 8l6 16h17l-14 10 5 17-14-10-14 10 5-17-14-10h17z"/>',
+  blob:'<path d="M32 8c12 0 22 6 22 18s-4 16-12 22-22 6-28-4 0-22 6-30 6-6 12-6z"/>',
+};
+const presetBox=document.getElementById('presets');
+Object.entries(presetSVGs).forEach(([k,path])=>{
+  const b=document.createElement('div');b.className='preset';
+  b.innerHTML=`<svg viewBox="0 0 64 64" fill="#111110">${path}</svg>`;
+  b.title=k;
+  b.onclick=()=>{
+    const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="#111110">${path}</svg>`;
+    const img=new Image();
+    img.onload=()=>addImage(img,k);
+    img.src='data:image/svg+xml;base64,'+btoa(svg);
+  };
+  presetBox.appendChild(b);
+});
+
+/* ---------- bg swatches ---------- */
+const bgs=['#ffffff','#eceae6','#111110','#ff4a1c','#f6e7c1','#cfe0d8','transparent'];
+const bgBox=document.getElementById('bgSwatches');
+bgs.forEach((c,i)=>{
+  const s=document.createElement('div');s.className='sw'+(i===0?' sel':'');
+  if(c==='transparent'){
+    s.style.background='repeating-conic-gradient(#ccc 0 25%,#fff 0 50%) 0/12px 12px';
+  }else s.style.background=c;
+  s.onclick=()=>{
+    state.bg=c==='transparent'?'rgba(0,0,0,0)':c;
+    document.querySelectorAll('.sw').forEach(x=>x.classList.remove('sel'));
+    s.classList.add('sel'); draw();
+  };
+  bgBox.appendChild(s);
+});
+
+/* ---------- tile size ---------- */
+document.getElementById('tileSize').addEventListener('input',e=>{
+  const old=state.tile, nw=+e.target.value;
+  const f=nw/old;
+  state.elements.forEach(el=>{el.x*=f;el.y*=f;});
+  state.tile=nw;
+  document.getElementById('tileVal').textContent=nw;
+  draw();
+});
+
+/* ---------- auto arrange ---------- */
+document.getElementById('scatter').onclick=()=>{
+  if(!state.elements.length)return;
+  state.elements.forEach(el=>{
+    el.x=Math.random()*state.tile; el.y=Math.random()*state.tile;
+    el.rot=Math.random()*Math.PI*2;
+  });
+  draw();
+};
+document.getElementById('gridFill').onclick=()=>{
+  const n=state.elements.length; if(!n)return;
+  const cols=Math.ceil(Math.sqrt(n)); const rows=Math.ceil(n/cols);
+  const cw=state.tile/cols, ch=state.tile/rows;
+  state.elements.forEach((el,i)=>{
+    const c=i%cols, r=Math.floor(i/cols);
+    el.x=cw*(c+0.5); el.y=ch*(r+0.5); el.rot=0;
+  });
+  draw();
+};
+
+/* ---------- zoom controls ---------- */
+function setZoom(z){
+  state.zoom=Math.min(4,Math.max(0.2,z));
+  document.getElementById('zoomVal').textContent=Math.round(state.zoom*100)+'%';
+  draw();
+}
+document.getElementById('zoomIn').onclick=()=>setZoom(state.zoom*1.15);
+document.getElementById('zoomOut').onclick=()=>setZoom(state.zoom/1.15);
+document.getElementById('zoomFit').onclick=()=>{
+  const pad=80;
+  const fit=Math.min((state.view.w-pad)/state.tile,(state.view.h-pad)/state.tile);
+  state.pan={x:0,y:0}; setZoom(fit);
+};
+
+/* ---------- export ---------- */
+document.getElementById('btnExport').onclick=()=>{
+  const c=document.createElement('canvas');
+  c.width=state.tile; c.height=state.tile;
+  const x=c.getContext('2d');
+  if(state.bg && state.bg!=='rgba(0,0,0,0)'){ x.fillStyle=state.bg; x.fillRect(0,0,state.tile,state.tile); }
+  drawTileContent(x,0,0,1,true);
+  c.toBlob(b=>{
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(b);
+    a.download=`patternium-${state.tile}px.png`;
+    a.click();
+  });
+};
+document.getElementById('btnClear').onclick=()=>{
+  if(state.elements.length && !confirm('Clear all elements?'))return;
+  state.elements=[]; selectElement(null); renderLayers(); draw();
+  document.getElementById('hint').style.display='';
+};
+
+/* ---------- init ---------- */
+resizeView();
+setZoom(Math.min((state.view.w-120)/state.tile,(state.view.h-120)/state.tile,1));
+selectElement(null);
+</script>
+</body>
+</html>
