@@ -23,7 +23,9 @@
     margin:0;background:var(--bg);color:var(--ink);
     font-family:var(--sans);font-size:13px;
     -webkit-font-smoothing:antialiased;overflow:hidden;
+    user-select:none;-webkit-user-select:none;
   }
+  input,textarea{user-select:text;-webkit-user-select:text}
   .mono{font-family:var(--mono);letter-spacing:.04em}
 
   /* ---------- top bar ---------- */
@@ -157,6 +159,24 @@
 
   .foot{margin-top:auto;padding:16px;border-top:1px solid var(--line)}
   input[type=file]{display:none}
+
+  /* layer context menu */
+  .ctx-menu{position:fixed;z-index:9999;min-width:166px;background:var(--panel);
+            border:1px solid var(--line-strong);border-radius:10px;padding:6px;
+            box-shadow:0 12px 32px rgba(0,0,0,.16)}
+  .ctx-menu[hidden]{display:none}
+  .ctx-menu button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+                   border:none;background:none;cursor:pointer;font-family:var(--mono);
+                   font-size:11px;letter-spacing:.04em;color:var(--ink);
+                   padding:8px 10px;border-radius:7px;transition:.1s}
+  .ctx-menu button:hover{background:var(--white)}
+  .ctx-menu button .ci{width:14px;text-align:center;opacity:.7;font-size:12px}
+  .ctx-menu button em{font-style:normal;color:var(--ink-soft);margin-left:auto;font-size:10px}
+  .ctx-menu button.danger{color:var(--accent)}
+  .ctx-menu button.danger:hover{background:rgba(255,74,28,.08)}
+  .ctx-menu button[disabled]{opacity:.32;cursor:not-allowed}
+  .ctx-menu button[disabled]:hover{background:none}
+  .ctx-sep{height:1px;background:var(--line);margin:5px 4px}
   .kbd{font-family:var(--mono);background:var(--bg);border:1px solid var(--line-strong);border-radius:4px;
        padding:1px 5px;font-size:10px}
 </style>
@@ -279,13 +299,15 @@
       </div>
     </div>
 
-    <div class="foot">
-      <div style="font-family:var(--mono);font-size:10px;color:var(--ink-soft);line-height:1.9">
-        <span class="kbd">drag</span> move &nbsp; <span class="kbd">corner</span> resize<br>
-        <span class="kbd">top dot</span> rotate &nbsp; <span class="kbd">⌫</span> delete
-      </div>
-    </div>
   </aside>
+</div>
+
+<!-- layer context menu -->
+<div id="ctxMenu" class="ctx-menu" hidden>
+  <button data-act="duplicate"><span class="ci">⧉</span>Duplicate</button>
+  <button data-act="group" id="ctxGroup"><span class="ci">⊞</span>Group <em id="ctxGroupN"></em></button>
+  <div class="ctx-sep"></div>
+  <button data-act="delete" class="danger"><span class="ci">✕</span>Delete</button>
 </div>
 
 <script>
@@ -305,7 +327,8 @@ const state = {
   tile: 512,
   bg: '#ffffff',
   elements: [],          // {id,img,x,y,w,h,scale,rot,opacity,name}
-  selected: null,
+  selected: null,        // single element with on-canvas transform handles
+  selection: [],         // one or more elements selected in the Layers panel
   zoom: 1,
   pan: {x:0, y:0},
   view: {w:0, h:0},
@@ -555,10 +578,15 @@ editor.addEventListener('wheel',e=>{
 /* ---------- selection + panel sync ---------- */
 function selectElement(el){
   state.selected=el;
-  document.querySelectorAll('.layer').forEach(l=>l.classList.toggle('sel', el&&l.dataset.id==el.id));
-  const has=!!el;
+  state.selection=el?[el]:[];
+  updateTransformPanel();
+}
+function updateTransformPanel(){
+  const has=!!state.selected;
   ['scale','rotate','opacity'].forEach(id=>document.getElementById(id).disabled=!has);
   ['bringFwd','sendBack','dupBtn','centerEl'].forEach(id=>document.getElementById(id).disabled=!has);
+  document.querySelectorAll('.layer').forEach(l=>
+    l.classList.toggle('sel', state.selection.some(e=>e.id==l.dataset.id)));
   syncPanel();
 }
 function syncPanel(){
@@ -612,8 +640,8 @@ document.getElementById('centerEl').onclick=()=>{
 /* ---------- keyboard ---------- */
 window.addEventListener('keydown',e=>{
   if(['INPUT','TEXTAREA'].includes(document.activeElement.tagName))return;
-  if((e.key==='Delete'||e.key==='Backspace')&&state.selected){
-    removeElement(state.selected); e.preventDefault();
+  if((e.key==='Delete'||e.key==='Backspace')&&state.selection.length){
+    deleteSelection(); e.preventDefault();
   }
   if(state.selected){
     const step=e.shiftKey?10:1; let moved=true;
@@ -649,8 +677,10 @@ function addImage(img,name){
 }
 function removeElement(el){
   state.elements=state.elements.filter(x=>x!==el);
-  if(state.selected===el)selectElement(null);
-  renderLayers(); draw();
+  state.selection=state.selection.filter(x=>x!==el);
+  if(state.selected===el)state.selected=null;
+  updateTransformPanel(); renderLayers(); draw();
+  if(!state.elements.length)document.getElementById('hint').style.display='';
 }
 function renderLayers(){
   const box=document.getElementById('layers');
@@ -659,7 +689,7 @@ function renderLayers(){
   box.innerHTML='';
   [...state.elements].reverse().forEach(el=>{
     const d=document.createElement('div');
-    d.className='layer'+(state.selected===el?' sel':'');
+    d.className='layer'+(state.selection.includes(el)?' sel':'');
     d.dataset.id=el.id;
     const thumb=document.createElement('div');
     thumb.className='thumb';
@@ -668,9 +698,106 @@ function renderLayers(){
     const del=document.createElement('button');del.className='del';del.innerHTML='✕';
     del.onclick=ev=>{ev.stopPropagation();removeElement(el);};
     d.append(thumb,nm,del);
-    d.onclick=()=>{selectElement(el);renderLayers();draw();};
+    d.onclick=ev=>handleLayerClick(el,ev);
+    d.oncontextmenu=ev=>{ev.preventDefault();openLayerMenu(el,ev);};
     box.appendChild(d);
   });
+}
+
+/* click a layer: plain = single select, Ctrl/Cmd or Shift = add/remove */
+function handleLayerClick(el,ev){
+  if(ev.ctrlKey||ev.metaKey||ev.shiftKey){
+    const i=state.selection.indexOf(el);
+    if(i>=0)state.selection.splice(i,1); else state.selection.push(el);
+    state.selected=state.selection.length===1?state.selection[0]:null;
+    updateTransformPanel();
+  }else{
+    selectElement(el);
+  }
+  renderLayers(); draw();
+}
+
+/* ---------- layer context menu ---------- */
+const ctxMenu=document.getElementById('ctxMenu');
+function openLayerMenu(el,ev){
+  // if right-clicked layer isn't part of the current multi-selection, select just it
+  if(!state.selection.includes(el)){ selectElement(el); renderLayers(); draw(); }
+  const multi=state.selection.length>=2;
+  const grpBtn=document.getElementById('ctxGroup');
+  grpBtn.disabled=!multi;
+  document.getElementById('ctxGroupN').textContent=multi?'('+state.selection.length+')':'';
+  ctxMenu.hidden=false;
+  // clamp within viewport
+  const mw=ctxMenu.offsetWidth, mh=ctxMenu.offsetHeight;
+  ctxMenu.style.left=Math.min(ev.clientX,window.innerWidth-mw-8)+'px';
+  ctxMenu.style.top=Math.min(ev.clientY,window.innerHeight-mh-8)+'px';
+}
+function closeLayerMenu(){ ctxMenu.hidden=true; }
+ctxMenu.addEventListener('click',e=>{
+  const btn=e.target.closest('button'); if(!btn||btn.disabled)return;
+  const act=btn.dataset.act;
+  if(act==='duplicate')duplicateSelection();
+  else if(act==='group')groupSelection();
+  else if(act==='delete')deleteSelection();
+  closeLayerMenu();
+});
+window.addEventListener('pointerdown',e=>{ if(!ctxMenu.hidden && !ctxMenu.contains(e.target))closeLayerMenu(); });
+window.addEventListener('scroll',closeLayerMenu,true);
+window.addEventListener('keydown',e=>{ if(e.key==='Escape')closeLayerMenu(); });
+window.addEventListener('blur',closeLayerMenu);
+
+function duplicateSelection(){
+  if(!state.selection.length)return;
+  const dups=[];
+  state.selection.forEach(el=>{
+    const c={...el,id:nextId++,x:(el.x+30)%state.tile,y:(el.y+30)%state.tile};
+    state.elements.push(c); dups.push(c);
+  });
+  state.selection=dups; state.selected=dups.length===1?dups[0]:null;
+  updateTransformPanel(); renderLayers(); draw();
+}
+function deleteSelection(){
+  if(!state.selection.length)return;
+  const set=new Set(state.selection);
+  state.elements=state.elements.filter(e=>!set.has(e));
+  state.selection=[]; state.selected=null;
+  updateTransformPanel(); renderLayers(); draw();
+  if(!state.elements.length)document.getElementById('hint').style.display='';
+}
+/* Group = flatten the selected layers into one combined element */
+function groupSelection(){
+  const sel=state.elements.filter(e=>state.selection.includes(e)); // preserve z-order
+  if(sel.length<2)return;
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  sel.forEach(el=>{
+    const hw=el.w/2,hh=el.h/2,c=Math.cos(el.rot),s=Math.sin(el.rot);
+    [[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]].forEach(([px,py])=>{
+      const x=el.x+px*c-py*s, y=el.y+px*s+py*c;
+      minX=Math.min(minX,x);maxX=Math.max(maxX,x);
+      minY=Math.min(minY,y);maxY=Math.max(maxY,y);
+    });
+  });
+  const w=Math.max(1,Math.ceil(maxX-minX)), h=Math.max(1,Math.ceil(maxY-minY));
+  const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+  const cx=cv.getContext('2d');
+  sel.forEach(el=>{
+    cx.save();
+    cx.globalAlpha=el.opacity;
+    cx.translate(el.x-minX, el.y-minY);
+    cx.rotate(el.rot);
+    cx.drawImage(el.img,-el.w/2,-el.h/2,el.w,el.h);
+    cx.restore();
+  });
+  const set=new Set(sel);
+  const img=new Image();
+  img.onload=()=>{
+    state.elements=state.elements.filter(e=>!set.has(e));
+    const group={id:nextId++, img, name:'group',
+      x:(minX+maxX)/2, y:(minY+maxY)/2, scale:1, w, h, rot:0, opacity:1};
+    state.elements.push(group);
+    selectElement(group); renderLayers(); draw();
+  };
+  img.src=cv.toDataURL();
 }
 
 /* ---------- file upload ---------- */
