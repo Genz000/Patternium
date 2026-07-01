@@ -87,10 +87,18 @@
   /* layers */
   .layers{display:flex;flex-direction:column;gap:6px}
   .layer{
-    display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:8px;
-    border:1px solid transparent;cursor:pointer;transition:.12s;background:var(--white)}
+    position:relative;display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:8px;
+    border:1px solid transparent;cursor:pointer;transition:border-color .12s,background .12s;background:var(--white)}
   .layer:hover{border-color:var(--line-strong)}
   .layer.sel{border-color:var(--ink);background:#fff}
+  .layer .grip{flex:none;width:11px;color:var(--line-strong);font-size:11px;line-height:1;letter-spacing:-2px;
+               cursor:grab;user-select:none;transition:.12s}
+  .layer:hover .grip{color:var(--ink-soft)}
+  .layer.dragging{opacity:.45}
+  .layer.drop-above::before,.layer.drop-below::after{content:'';position:absolute;left:6px;right:6px;height:2px;
+               background:var(--accent);border-radius:2px}
+  .layer.drop-above::before{top:-2px}
+  .layer.drop-below::after{bottom:-2px}
   .layer .thumb{width:30px;height:30px;border-radius:6px;background:#fff;border:1px solid var(--line);
                 background-size:contain;background-repeat:no-repeat;background-position:center;flex:none}
   .layer .name{flex:1;font-family:var(--mono);font-size:11px;color:var(--ink);overflow:hidden;
@@ -357,14 +365,6 @@
       <div class="ctrl">
         <label>Opacity <span class="val"><span id="opaVal">100</span>%</span></label>
         <input type="range" id="opacity" min="5" max="100" step="1" value="100" disabled>
-      </div>
-      <div class="ctrl">
-        <label>Order</label>
-        <div class="seg-btns">
-          <button class="chip" id="bringFwd" disabled>Forward</button>
-          <button class="chip" id="sendBack" disabled>Back</button>
-          <button class="chip" id="dupBtn" disabled>Duplicate</button>
-        </div>
       </div>
       <div class="ctrl">
         <label>Auto-arrange</label>
@@ -757,7 +757,7 @@ function selectElement(el){
 function updateTransformPanel(){
   const has=!!state.selected;
   ['scale','rotate','opacity'].forEach(id=>document.getElementById(id).disabled=!has);
-  ['bringFwd','sendBack','dupBtn','centerEl'].forEach(id=>document.getElementById(id).disabled=!has);
+  ['centerEl'].forEach(id=>document.getElementById(id).disabled=!has);
   document.querySelectorAll('.layer').forEach(l=>
     l.classList.toggle('sel', state.selection.some(e=>e.id==l.dataset.id)));
   syncPanel();
@@ -846,20 +846,6 @@ document.getElementById('opacity').addEventListener('input',e=>{
 ['scale','rotate','opacity'].forEach(id=>
   document.getElementById(id).addEventListener('change',()=>{ if(state.selected)commit(); }));
 
-document.getElementById('bringFwd').onclick=()=>reorder(1);
-document.getElementById('sendBack').onclick=()=>reorder(-1);
-function reorder(dir){
-  const el=state.selected; if(!el)return;
-  const i=state.elements.indexOf(el); const j=i+dir;
-  if(j<0||j>=state.elements.length)return;
-  state.elements.splice(i,1); state.elements.splice(j,0,el);
-  renderLayers(); draw(); commit();
-}
-document.getElementById('dupBtn').onclick=()=>{
-  const el=state.selected; if(!el)return;
-  const c={...el,id:nextId++,x:(el.x+30)%state.tile,y:(el.y+30)%state.tile,name:el.name};
-  state.elements.push(c); renderLayers(); selectElement(c); draw(); commit();
-};
 document.getElementById('centerEl').onclick=()=>{
   if(!state.selected)return;
   state.selected.x=state.tile/2; state.selected.y=state.tile/2; draw(); commit();
@@ -921,17 +907,57 @@ function renderLayers(){
     const d=document.createElement('div');
     d.className='layer'+(state.selection.includes(el)?' sel':'');
     d.dataset.id=el.id;
+    d.draggable=true;
+    const grip=document.createElement('span');grip.className='grip';grip.innerHTML='⋮⋮';
     const thumb=document.createElement('div');
     thumb.className='thumb';
     thumb.style.backgroundImage=`url(${el.img.src})`;
     const nm=document.createElement('div');nm.className='name';nm.textContent=el.name;
     const del=document.createElement('button');del.className='del';del.innerHTML='✕';
     del.onclick=ev=>{ev.stopPropagation();removeElement(el);};
-    d.append(thumb,nm,del);
+    d.append(grip,thumb,nm,del);
     d.onclick=ev=>handleLayerClick(el,ev);
     d.oncontextmenu=ev=>{ev.preventDefault();openLayerMenu(el,ev);};
+    // drag-and-drop reordering
+    d.addEventListener('dragstart',ev=>{
+      dragLayerId=el.id; d.classList.add('dragging');
+      ev.dataTransfer.effectAllowed='move';
+      try{ev.dataTransfer.setData('text/plain',String(el.id));}catch(_){}
+    });
+    d.addEventListener('dragend',()=>{
+      dragLayerId=null;
+      document.querySelectorAll('.layer').forEach(l=>l.classList.remove('dragging','drop-above','drop-below'));
+    });
+    d.addEventListener('dragover',ev=>{
+      if(dragLayerId==null||dragLayerId===el.id)return;
+      ev.preventDefault(); ev.dataTransfer.dropEffect='move';
+      const r=d.getBoundingClientRect();
+      const before=(ev.clientY-r.top)<r.height/2;
+      d.classList.toggle('drop-above',before);
+      d.classList.toggle('drop-below',!before);
+    });
+    d.addEventListener('dragleave',()=>d.classList.remove('drop-above','drop-below'));
+    d.addEventListener('drop',ev=>{
+      ev.preventDefault();
+      const r=d.getBoundingClientRect();
+      const before=(ev.clientY-r.top)<r.height/2;
+      reorderLayer(dragLayerId, el.id, before);
+    });
     box.appendChild(d);
   });
+}
+let dragLayerId=null;
+/* reorder within the displayed (top-first) order, then map back to z-order */
+function reorderLayer(dragId,targetId,before){
+  if(dragId==null||dragId===targetId)return;
+  let disp=[...state.elements].reverse();          // top layer first (as shown)
+  const di=disp.findIndex(e=>e.id===dragId);
+  if(di<0)return;
+  const [moved]=disp.splice(di,1);
+  const ti=disp.findIndex(e=>e.id===targetId);
+  if(ti<0)disp.push(moved); else disp.splice(before?ti:ti+1,0,moved);
+  state.elements=disp.reverse();                   // back to z-order (bottom first)
+  renderLayers(); draw(); commit();
 }
 
 /* click a layer: plain = single select, Ctrl/Cmd or Shift = add/remove */
